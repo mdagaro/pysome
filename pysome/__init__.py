@@ -1,4 +1,4 @@
-from typing import Any, Generic, Mapping, TypeVar, Union
+from typing import Any, Generic, Mapping, Optional, TypeVar, Union
 from abc import ABC, abstractmethod
 from functools import wraps
 import math
@@ -6,13 +6,13 @@ import collections
 
 T = TypeVar("T")
 
-
 def checkattr(f):
     @wraps(f)
     def wrapper(self, *args):
         if not hasattr(self.get(), f.__name__):
             raise AttributeError(
-                "%s does not have attribute %s" % (self.get().__class__, f.__name__)
+                "%s does not have attribute %s"
+                % (self.get().__class__, f.__name__)
             )
         return f(self, *args)
 
@@ -20,8 +20,9 @@ def checkattr(f):
 
 
 class Maybe(Generic[T], ABC):
-    def __init__(self, value: T) -> None:
-        self._value = value
+    def __init__(self, value: T, is_none: Optional[bool] = False) -> None:
+        if not is_none:
+            self._value = value
         super().__init__()
 
     @abstractmethod
@@ -29,25 +30,33 @@ class Maybe(Generic[T], ABC):
         pass
 
     @abstractmethod
-    def or_else(self, value) -> T:
+    def get_or_else(self, value) -> T:
         pass
 
+    @abstractmethod
     def is_some(self) -> bool:
-        return self._value is not None
+        pass
 
+    @abstractmethod
     def is_none(self) -> bool:
-        return self._value is None
+        pass
 
 
-class Something(Maybe[T]):
+class Some(Maybe[T]):
     def __init__(self, value: T) -> None:
         super().__init__(value)
 
     def get(self) -> T:
         return self._value
 
-    def or_else(self, value) -> T:
+    def get_or_else(self, value) -> T:
         return self.get()
+
+    def is_some(self) -> bool:
+        return True
+
+    def is_none(self) -> bool:
+        return False
 
     def __magic_wrapper(f):
         def wrapper(self, *args):
@@ -56,7 +65,7 @@ class Something(Maybe[T]):
         return wrapper
 
     def __eq__(self, other: Any) -> bool:
-        if isinstance(other, Something):
+        if isinstance(other, Some):
             return self.get() == other.get()
         elif isinstance(other, Nothing):
             return False
@@ -66,7 +75,7 @@ class Something(Maybe[T]):
     @checkattr
     def __getitem__(self, key):
         try:
-            return maybe(self.get()[key])
+            return Some(self.get()[key])
         except KeyError:
             return Nothing()
         except IndexError:
@@ -87,33 +96,75 @@ class Something(Maybe[T]):
     __len__ = __magic_wrapper(len)
     __hash__ = __magic_wrapper(hash)
 
-    def __add__(self, other):
-        return self.get() + other
+    def __add__(self, other: Union[Maybe[T], T]):
+        # Normalize
+        if isinstance(other, Some):
+            other = other.get()
 
-    def __sub__(self, other):
-        return self.get() - other
+        try:
+            return Some(self.get() + other)  # type: ignore
+        except AttributeError:
+            return Nothing()
+        except TypeError:
+            return Nothing()
 
-    def __mul__(self, other):
-        return self.get() * other
+    def __sub__(self, other: Union[Maybe[T], T]):
+        # Normalize
+        if isinstance(other, Some):
+            other = other.get()
 
-    def __div__(self, other):
-        return self.get() / other
+        try:
+            return Some(self.get() - other)  # type: ignore
+        except AttributeError:
+            return Nothing()
+        except TypeError:
+            return Nothing()
+
+    def __mul__(self, other: Union[Maybe[T], T]):
+        # Normalize
+        if isinstance(other, Some):
+            other = other.get()
+
+        try:
+            return Some(self.get() * other)  # type: ignore
+        except AttributeError:
+            return Nothing()
+        except TypeError:
+            return Nothing()
+
+    def __div__(self, other: Union[Maybe[T], T]):
+        # Normalize
+        if isinstance(other, Some):
+            other = other.get()
+
+        try:
+            return Some(self.get() / other)
+        except AttributeError:
+            return Nothing()
+        except TypeError:
+            return Nothing()
 
     def __str__(self) -> str:
-        return "Something(%s)" % repr(self.get())
+        return "Some(%s)" % repr(self.get())
 
     __repr__ = __str__
 
 
 class Nothing(Maybe[T]):
     def __init__(self) -> None:
-        super().__init__(None)
+        super().__init__(None, True)
 
     def get(self) -> T:
         raise Exception("bad")
 
-    def or_else(self, value) -> T:
+    def get_or_else(self, value) -> T:
         return value
+
+    def is_some(self) -> bool:
+        return False
+
+    def is_none(self) -> bool:
+        return True
 
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, Nothing)
@@ -124,15 +175,5 @@ class Nothing(Maybe[T]):
     __repr__ = __str__
 
 
-K = TypeVar("K")
-V = TypeVar("V")
-
-X = TypeVar("X")
-
-
-def maybe(value: Union[Maybe[X], X]) -> Maybe[X]:
-    if isinstance(value, Maybe):
-        return value
-    if value is not None:
-        return Something(value)
-    return Nothing()
+a: Maybe[str] = Some('str')
+b: Maybe[int] = Some(1)
