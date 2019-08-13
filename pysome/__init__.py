@@ -1,6 +1,7 @@
 from typing import Any, Generic, Mapping, TypeVar, Union
 from abc import ABC, abstractmethod
 from functools import wraps
+import math
 import collections
 
 T = TypeVar("T")
@@ -31,9 +32,11 @@ class Maybe(Generic[T], ABC):
     def or_else(self, value) -> T:
         pass
 
-    @abstractmethod
     def is_some(self) -> bool:
-        pass
+        return self._value is not None
+
+    def is_none(self) -> bool:
+        return self._value is None
 
 
 class Something(Maybe[T]):
@@ -46,8 +49,11 @@ class Something(Maybe[T]):
     def or_else(self, value) -> T:
         return self.get()
 
-    def is_some(self) -> bool:
-        return True
+    def __magic_wrapper(f):
+        def wrapper(self, *args):
+            return f(self.get(), *args)
+
+        return wrapper
 
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, Something):
@@ -70,8 +76,28 @@ class Something(Maybe[T]):
     def __setitem__(self, key, value):
         self.get()[key] = value
 
-    def __int__(self):
-        return int(self.get())
+    __int__ = __magic_wrapper(int)
+    __complex__ = __magic_wrapper(complex)
+    __float__ = __magic_wrapper(float)
+    __bool__ = __magic_wrapper(bool)
+    __round__ = __magic_wrapper(round)
+    __trunc__ = __magic_wrapper(math.trunc)
+    __floor__ = __magic_wrapper(math.floor)
+    __ceil__ = __magic_wrapper(math.ceil)
+    __len__ = __magic_wrapper(len)
+    __hash__ = __magic_wrapper(hash)
+
+    def __add__(self, other):
+        return self.get() + other
+
+    def __sub__(self, other):
+        return self.get() - other
+
+    def __mul__(self, other):
+        return self.get() * other
+
+    def __div__(self, other):
+        return self.get() / other
 
     def __str__(self) -> str:
         return "Something(%s)" % repr(self.get())
@@ -88,9 +114,6 @@ class Nothing(Maybe[T]):
 
     def or_else(self, value) -> T:
         return value
-
-    def is_some(self) -> bool:
-        return False
 
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, Nothing)
