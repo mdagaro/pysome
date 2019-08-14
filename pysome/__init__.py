@@ -1,10 +1,13 @@
-from typing import Any, Generic, Mapping, Optional, TypeVar, Union
+from typing import Any, Callable, Generic, Mapping, Optional, TypeVar, Union
 from abc import ABC, abstractmethod
 from functools import wraps
 import math
 import collections
 
-T = TypeVar("T")
+T = TypeVar("T", Any, None)
+
+__all__ = ["Maybe", "Some", "Nothing"]
+
 
 def checkattr(f):
     @wraps(f)
@@ -20,7 +23,7 @@ def checkattr(f):
 
 
 class Maybe(Generic[T], ABC):
-    def __init__(self, value: T, is_none: Optional[bool] = False) -> None:
+    def __init__(self, value: None, is_none: Optional[bool] = False) -> None:
         if not is_none:
             self._value = value
         super().__init__()
@@ -96,53 +99,35 @@ class Some(Maybe[T]):
     __len__ = __magic_wrapper(len)
     __hash__ = __magic_wrapper(hash)
 
-    def __add__(self, other: Union[Maybe[T], T]):
-        # Normalize
-        if isinstance(other, Some):
-            other = other.get()
+    def __op_wrapper(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(self, other):
+            # Normalize
+            if isinstance(other, Some):
+                other = other.get()
+            try:
+                return Some(func(self.get(), other))  # type: ignore
+            except TypeError:
+                return Nothing()
+            # Division case (I don't know how much overhead this adds)
+            except ZeroDivisionError:
+                return Nothing()
 
-        try:
-            return Some(self.get() + other)  # type: ignore
-        except AttributeError:
-            return Nothing()
-        except TypeError:
-            return Nothing()
+        return wrapper
 
-    def __sub__(self, other: Union[Maybe[T], T]):
-        # Normalize
-        if isinstance(other, Some):
-            other = other.get()
+    __add__ = __op_wrapper(lambda x, y: x + y)
+    __radd__ = __add__
+    __sub__ = __op_wrapper(lambda x, y: x - y)
+    __rsub__ = __op_wrapper(lambda x, y: y - x)
+    __mul__ = __op_wrapper(lambda x, y: x * y)
+    __rmul__ = __mul__
+    __truediv__ = __op_wrapper(lambda x, y: x / y)
+    __rtruediv__ = __op_wrapper(lambda x, y: y / x)
 
-        try:
-            return Some(self.get() - other)  # type: ignore
-        except AttributeError:
-            return Nothing()
-        except TypeError:
-            return Nothing()
-
-    def __mul__(self, other: Union[Maybe[T], T]):
-        # Normalize
-        if isinstance(other, Some):
-            other = other.get()
-
-        try:
-            return Some(self.get() * other)  # type: ignore
-        except AttributeError:
-            return Nothing()
-        except TypeError:
-            return Nothing()
-
-    def __div__(self, other: Union[Maybe[T], T]):
-        # Normalize
-        if isinstance(other, Some):
-            other = other.get()
-
-        try:
-            return Some(self.get() / other)
-        except AttributeError:
-            return Nothing()
-        except TypeError:
-            return Nothing()
+    def __getattr__(self, attr):
+        if hasattr(self.get(), "__getattr__"):
+            return self.get().__getattr__(attr)
+        return self.get().__getattribute__(attr)
 
     def __str__(self) -> str:
         return "Some(%s)" % repr(self.get())
@@ -153,6 +138,10 @@ class Some(Maybe[T]):
 class Nothing(Maybe[T]):
     def __init__(self) -> None:
         super().__init__(None, True)
+
+    @staticmethod
+    def __return_nothing(*args, **kwargs):
+        return Nothing()
 
     def get(self) -> T:
         raise Exception("bad")
@@ -169,11 +158,17 @@ class Nothing(Maybe[T]):
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, Nothing)
 
+    # All operators should return Nothing
+    __add__ = __return_nothing
+    __radd__ = __return_nothing
+    __sub__ = __return_nothing
+    __rsub__ = __return_nothing
+    __mul__ = __return_nothing
+    __rmul__ = __return_nothing
+    __truediv__ = __return_nothing
+    __rtruediv__ = __return_nothing
+
     def __str__(self):
         return "Nothing()"
 
     __repr__ = __str__
-
-
-a: Maybe[str] = Some('str')
-b: Maybe[int] = Some(1)
