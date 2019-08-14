@@ -1,10 +1,19 @@
-from typing import Any, Callable, Generic, Mapping, Optional, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Generic,
+    Mapping,
+    Optional,
+    TypeVar,
+    Union,
+)
 from abc import ABC, abstractmethod
 from functools import wraps
 import math
 import collections
 
-T = TypeVar("T", Any, None)
+T = TypeVar("T")
 
 __all__ = ["Maybe", "Some", "Nothing"]
 
@@ -22,43 +31,43 @@ def checkattr(f):
     return wrapper
 
 
-class Maybe(Generic[T], ABC):
-    def __init__(self, value: None, is_none: Optional[bool] = False) -> None:
+class Maybe(ABC):
+    def __init__(self, value, is_none=False):
         if not is_none:
             self._value = value
         super().__init__()
 
     @abstractmethod
-    def get(self) -> T:
+    def get(self):
         pass
 
     @abstractmethod
-    def get_or_else(self, value) -> T:
+    def get_or_else(self, value):
         pass
 
     @abstractmethod
-    def is_some(self) -> bool:
+    def is_some(self):
         pass
 
     @abstractmethod
-    def is_none(self) -> bool:
+    def is_none(self):
         pass
 
 
-class Some(Maybe[T]):
-    def __init__(self, value: T) -> None:
+class Some(Maybe):
+    def __init__(self, value):
         super().__init__(value)
 
-    def get(self) -> T:
+    def get(self):
         return self._value
 
-    def get_or_else(self, value) -> T:
+    def get_or_else(self, value):
         return self.get()
 
-    def is_some(self) -> bool:
+    def is_some(self):
         return True
 
-    def is_none(self) -> bool:
+    def is_none(self):
         return False
 
     def __magic_wrapper(f):
@@ -67,7 +76,7 @@ class Some(Maybe[T]):
 
         return wrapper
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other):
         if isinstance(other, Some):
             return self.get() == other.get()
         elif isinstance(other, Nothing):
@@ -99,7 +108,7 @@ class Some(Maybe[T]):
     __len__ = __magic_wrapper(len)
     __hash__ = __magic_wrapper(hash)
 
-    def __op_wrapper(func: Callable) -> Callable:
+    def __op_wrapper(func):
         @wraps(func)
         def wrapper(self, other):
             # Normalize
@@ -129,33 +138,33 @@ class Some(Maybe[T]):
             return self.get().__getattr__(attr)
         return self.get().__getattribute__(attr)
 
-    def __str__(self) -> str:
+    def __str__(self):
         return "Some(%s)" % repr(self.get())
 
     __repr__ = __str__
 
 
-class Nothing(Maybe[T]):
-    def __init__(self) -> None:
+class Nothing(Maybe):
+    def __init__(self):
         super().__init__(None, True)
 
     @staticmethod
     def __return_nothing(*args, **kwargs):
         return Nothing()
 
-    def get(self) -> T:
+    def get(self):
         raise Exception("bad")
 
-    def get_or_else(self, value) -> T:
+    def get_or_else(self, value):
         return value
 
-    def is_some(self) -> bool:
+    def is_some(self):
         return False
 
-    def is_none(self) -> bool:
+    def is_none(self):
         return True
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other):
         return isinstance(other, Nothing)
 
     # All operators should return Nothing
