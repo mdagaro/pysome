@@ -4,6 +4,7 @@ from typing import (
     cast,
     Generic,
     Mapping,
+    NoReturn,
     Optional,
     TypeVar,
     Union,
@@ -14,6 +15,9 @@ import math
 import collections
 
 T = TypeVar("T")
+U = TypeVar("U")
+K = TypeVar("K")
+V = TypeVar("V")
 
 __all__ = ["Maybe", "Some", "Nothing"]
 
@@ -31,18 +35,18 @@ def checkattr(f):
     return wrapper
 
 
-class Maybe(ABC):
+class Maybe(Generic[T], ABC):
     def __init__(self, value, is_none=False):
         if not is_none:
             self._value = value
         super().__init__()
 
     @abstractmethod
-    def get(self):
+    def get(self) -> Union[T, NoReturn]:
         pass
 
     @abstractmethod
-    def get_or_else(self, value):
+    def or_else(self, value: T) -> T:
         pass
 
     @abstractmethod
@@ -53,15 +57,19 @@ class Maybe(ABC):
     def is_none(self):
         pass
 
+    @abstractmethod
+    def __add__(self, other: Any) -> Any:
+        pass
 
-class Some(Maybe):
+
+class Some(Maybe[T]):
     def __init__(self, value):
         super().__init__(value)
 
-    def get(self):
+    def get(self) -> T:
         return self._value
 
-    def get_or_else(self, value):
+    def or_else(self, value: T) -> T:
         return self.get()
 
     def is_some(self):
@@ -85,7 +93,7 @@ class Some(Maybe):
         return self.get() == other
 
     @checkattr
-    def __getitem__(self, key):
+    def __getitem__(self, key: K) -> Maybe[V]:
         try:
             return Some(self.get()[key])
         except KeyError:
@@ -110,7 +118,7 @@ class Some(Maybe):
 
     def __op_wrapper(func):
         @wraps(func)
-        def wrapper(self, other):
+        def wrapper(self, other: Any) -> Maybe[Any]:
             # Normalize
             if isinstance(other, Some):
                 other = other.get()
@@ -144,7 +152,7 @@ class Some(Maybe):
     __repr__ = __str__
 
 
-class Nothing(Maybe):
+class Nothing(Maybe[T]):
     def __init__(self):
         super().__init__(None, True)
 
@@ -152,10 +160,10 @@ class Nothing(Maybe):
     def __return_nothing(*args, **kwargs):
         return Nothing()
 
-    def get(self):
+    def get(self) -> NoReturn:
         raise Exception("bad")
 
-    def get_or_else(self, value):
+    def or_else(self, value: T) -> T:
         return value
 
     def is_some(self):
@@ -181,3 +189,5 @@ class Nothing(Maybe):
         return "Nothing()"
 
     __repr__ = __str__
+
+
