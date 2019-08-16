@@ -19,7 +19,7 @@ U = TypeVar("U")
 K = TypeVar("K")
 V = TypeVar("V")
 
-__all__ = ["Maybe", "Some", "Nothing"]
+__all__ = ["Maybe", "Some", "Nothing", "maybe"]
 
 
 def checkattr(f):
@@ -61,6 +61,10 @@ class Maybe(Generic[T], ABC):
     def __add__(self, other: Any) -> Any:
         pass
 
+    @abstractmethod
+    def comb(self, *funcs: Callable[['Maybe'], 'Maybe']) -> 'Maybe':
+        pass
+
 
 class Some(Maybe[T]):
     def __init__(self, value):
@@ -77,6 +81,12 @@ class Some(Maybe[T]):
 
     def is_none(self):
         return False
+
+    def comb(self, *funcs: Callable[[T], Maybe]) -> Maybe:
+        if len(funcs) == 1:
+            print(funcs[0])
+            return funcs[0](self)
+        return funcs[0](self).comb(funcs[1:])
 
     def __magic_wrapper(f):
         def wrapper(self, *args):
@@ -95,7 +105,7 @@ class Some(Maybe[T]):
     @checkattr
     def __getitem__(self, key: K) -> Maybe[V]:
         try:
-            return Some(self.get()[key])
+            return maybe(self.get()[key])
         except KeyError:
             return Nothing()
         except IndexError:
@@ -123,7 +133,7 @@ class Some(Maybe[T]):
             if isinstance(other, Some):
                 other = other.get()
             try:
-                return Some(func(self.get(), other))  # type: ignore
+                return maybe(func(self.get(), other))  # type: ignore
             except TypeError:
                 return Nothing()
             # Division case (I don't know how much overhead this adds)
@@ -142,9 +152,12 @@ class Some(Maybe[T]):
     __rtruediv__ = __op_wrapper(lambda x, y: y / x)
 
     def __getattr__(self, attr):
-        if hasattr(self.get(), "__getattr__"):
-            return self.get().__getattr__(attr)
-        return self.get().__getattribute__(attr)
+        try:
+            if hasattr(self.get(), "__getattr__"):
+                return self.get().__getattr__(attr)
+            return self.get().__getattribute__(attr)
+        except AttributeError:
+            return Nothing()
 
     def __str__(self):
         return "Some(%s)" % repr(self.get())
@@ -172,6 +185,9 @@ class Nothing(Maybe[T]):
     def is_none(self):
         return True
 
+    def comb(self, *funcs: Callable[[T], Maybe]) -> Maybe:
+        return self
+
     def __eq__(self, other):
         return isinstance(other, Nothing)
 
@@ -184,10 +200,16 @@ class Nothing(Maybe[T]):
     __rmul__ = __return_nothing
     __truediv__ = __return_nothing
     __rtruediv__ = __return_nothing
+    __getitem__ = __return_nothing
+    __getattr__ = __return_nothing
+    __call__ = __return_nothing
 
     def __str__(self):
         return "Nothing()"
 
     __repr__ = __str__
 
-
+def maybe(value):
+    if value == Nothing():
+        return Nothing()
+    return Some(value)
